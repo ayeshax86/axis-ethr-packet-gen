@@ -79,10 +79,22 @@ module pgen (
             case (state)
 
                 IDLE: begin
-                    
-                    /*
-                    end else begin
-                  
+                    if (trig) begin
+                        r_pkt_size <= pkt_size;
+                        r_eth_type <= eth_type;
+                        r_n_pkt    <= n_pkt;
+                        r_ipg      <= ipg;
+
+                        r_src_addr <= src_addr;
+                        r_dst_addr <= dst_addr;
+
+                        payload_byte_cnt <= 0;
+                        pkt_cnt          <= 0;
+                        ipg_cnt          <= 0;
+                        cnt              <= 0;
+
+                    end
+                    else begin
                         r_pkt_size <= 0;
                         r_eth_type <= 0;
                         r_n_pkt    <= 0;
@@ -99,33 +111,12 @@ module pgen (
                         tdata  <= 0;
                         tvalid <= 0;
                         tlast  <= 0;
-                    */
-                    
-                end
-
-                LOAD: begin
-                    r_pkt_size <= pkt_size;
-                    r_eth_type <= eth_type;
-                    r_n_pkt    <= n_pkt;
-                    r_ipg      <= ipg;
-
-                    r_src_addr <= src_addr;
-                    r_dst_addr <= dst_addr;
-
-                    payload_byte_cnt <= 0;
-                    pkt_cnt          <= 0;
-                    ipg_cnt          <= 0;
-                    cnt              <= 0;
-
-                    tdata  <= 0;
-                    tvalid <= 1;
-                    tlast  <= 0;
-                    
+                    end
                 end
 
                 SEND_DST: begin
-                    tdata  <= r_dst_addr[47 - 8*cnt -: 8];
-                    tvalid <= 1;
+                    
+                   
                     if (tvalid && tready) begin
                     cnt    <= (cnt == 5) ? 0 : cnt + 1;
                     end
@@ -133,28 +124,28 @@ module pgen (
 
                 SEND_SRC: begin
                     
-                    tvalid <= 1;
+                 
                     if (tvalid && tready) begin
-                        tdata <= r_src_addr[47 - 8*cnt -: 8];
+                        
                     cnt    <= (cnt == 5) ? 0 : cnt + 1;
                     end
                 end
 
                 SEND_ETHR_TYPE: begin
                     
-                    tvalid <= 1;
+                    
                     if (tvalid && tready) begin
-                    tdata <= 8'h10;
+                    
                     cnt    <= (cnt == 1) ? 0 : cnt + 1;
                     end
                 end
 
                 SEND_PAYLOAD: begin
                     
-                    tvalid <= 1;
+                   
 
                     if (tvalid && tready) begin
-                    tdata  <= 8'hAA; // rand
+                    
                     payload_byte_cnt     <= payload_byte_cnt + 1;
                     end
 
@@ -168,13 +159,13 @@ module pgen (
                 end
 
                 IPG: begin
-                    tvalid <= 0;
+                   
                     tlast <= 0;
                     ipg_cnt <= ipg_cnt + 1;
                 end
 
                 CLEANUP: begin
-                    tvalid <= 0;
+                   
                     tlast  <= 0;
                 end
 
@@ -246,21 +237,34 @@ module pgen (
         endcase
     end
 
-    bit [7:0] tmp_data;
     always_comb begin
         case (state)
+
             IDLE: begin
-            tmp_data = 8'h00;
-            tmp_valid = 0;    
-            end 
-            
-            LOAD: tmp_data = 8'h00;
-            SEND_DST: tmp_data = r_dst_addr[47 - 8*cnt -: 8];
-            SEND_SRC: tmp_data = r_src_addr[47 - 8*cnt -: 8];
-            SEND_ETHR_TYPE: tmp_data = (cnt == 0) ? r_eth_type[7:0] : 8'h00;
-            SEND_PAYLOAD: tmp_data = 8'hAA; // rand
-            IPG: tmp_data = 8'h00;
-            CLEANUP: tmp_data = 8'h00;
+                
+                
+            end
+
+            SEND_DST: begin
+                tdata = r_dst_addr[47 - 8*cnt -: 8];
+                tvalid = 1;
+            end
+
+            SEND_SRC: begin
+            end
+
+            SEND_ETHR_TYPE: begin
+            end
+
+            SEND_PAYLOAD: begin
+            end
+
+            IPG: begin
+            end
+
+            CLEANUP: begin
+            end
+
         endcase
     end
 
