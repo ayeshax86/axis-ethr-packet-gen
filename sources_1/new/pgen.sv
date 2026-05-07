@@ -20,8 +20,8 @@ module pgen (
     input  logic        tready
 );
 
-    typedef enum logic [2:0] {
-        IDLE,
+    typedef enum logic [3:0] {
+        IDLE, LOAD,
         SEND_DST,
         SEND_SRC,
         SEND_ETHR_TYPE,
@@ -79,26 +79,10 @@ module pgen (
             case (state)
 
                 IDLE: begin
-                    if (trig) begin
-                        r_pkt_size <= pkt_size;
-                        r_eth_type <= eth_type;
-                        r_n_pkt    <= n_pkt;
-                        r_ipg      <= ipg;
-
-                        r_src_addr <= src_addr;
-                        r_dst_addr <= dst_addr;
-
-                        payload_byte_cnt <= 0;
-                        pkt_cnt          <= 0;
-                        ipg_cnt          <= 0;
-                        cnt              <= 0;
-
-                        tdata  <= 0;
-                        tvalid <= 1;
-                        tlast  <= 0;
-
-                    end
-                    else begin
+                    
+                    /*
+                    end else begin
+                  
                         r_pkt_size <= 0;
                         r_eth_type <= 0;
                         r_n_pkt    <= 0;
@@ -115,7 +99,28 @@ module pgen (
                         tdata  <= 0;
                         tvalid <= 0;
                         tlast  <= 0;
-                    end
+                    */
+                    
+                end
+
+                LOAD: begin
+                    r_pkt_size <= pkt_size;
+                    r_eth_type <= eth_type;
+                    r_n_pkt    <= n_pkt;
+                    r_ipg      <= ipg;
+
+                    r_src_addr <= src_addr;
+                    r_dst_addr <= dst_addr;
+
+                    payload_byte_cnt <= 0;
+                    pkt_cnt          <= 0;
+                    ipg_cnt          <= 0;
+                    cnt              <= 0;
+
+                    tdata  <= 0;
+                    tvalid <= 1;
+                    tlast  <= 0;
+                    
                 end
 
                 SEND_DST: begin
@@ -127,31 +132,35 @@ module pgen (
                 end
 
                 SEND_SRC: begin
-                    tdata <= r_src_addr[47 - 8*cnt -: 8];
+                    
                     tvalid <= 1;
                     if (tvalid && tready) begin
+                        tdata <= r_src_addr[47 - 8*cnt -: 8];
                     cnt    <= (cnt == 5) ? 0 : cnt + 1;
                     end
                 end
 
                 SEND_ETHR_TYPE: begin
-                    tdata <= 8'h10;
+                    
                     tvalid <= 1;
                     if (tvalid && tready) begin
+                    tdata <= 8'h10;
                     cnt    <= (cnt == 1) ? 0 : cnt + 1;
                     end
                 end
 
                 SEND_PAYLOAD: begin
-                    tdata  <= 8'hAA; // rand
+                    
                     tvalid <= 1;
 
                     if (tvalid && tready) begin
-                    payload_byte_cnt    <= (payload_byte_cnt == r_pkt_size - 1) ? 0 : payload_byte_cnt + 1;
+                    tdata  <= 8'hAA; // rand
+                    payload_byte_cnt     <= payload_byte_cnt + 1;
                     end
 
-                    if (pkt_cnt == r_n_pkt) begin
+                    if (payload_byte_cnt == r_n_pkt) begin
                         tlast <= 1;
+                        pkt_cnt <= pkt_cnt + 1;
                     end
                     else begin
                         tlast <= 0;
@@ -180,6 +189,10 @@ module pgen (
 
             IDLE: begin
                 if (trig)
+                    next_state = LOAD;
+            end
+
+            LOAD: begin
                     next_state = SEND_DST;
             end
 
@@ -206,7 +219,7 @@ module pgen (
 
             SEND_PAYLOAD: begin
 
-                if (payload_byte_cnt == r_pkt_size - 1) begin
+                if (tlast) begin
                     next_state = IPG;
                 end
                 else begin
@@ -230,6 +243,24 @@ module pgen (
                 next_state = IDLE;
             end
 
+        endcase
+    end
+
+    bit [7:0] tmp_data;
+    always_comb begin
+        case (state)
+            IDLE: begin
+            tmp_data = 8'h00;
+            tmp_valid = 0;    
+            end 
+            
+            LOAD: tmp_data = 8'h00;
+            SEND_DST: tmp_data = r_dst_addr[47 - 8*cnt -: 8];
+            SEND_SRC: tmp_data = r_src_addr[47 - 8*cnt -: 8];
+            SEND_ETHR_TYPE: tmp_data = (cnt == 0) ? r_eth_type[7:0] : 8'h00;
+            SEND_PAYLOAD: tmp_data = 8'hAA; // rand
+            IPG: tmp_data = 8'h00;
+            CLEANUP: tmp_data = 8'h00;
         endcase
     end
 
