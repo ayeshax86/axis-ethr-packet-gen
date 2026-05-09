@@ -22,7 +22,6 @@ module pgen (
 
     typedef enum logic [3:0] {
         IDLE,
-        LOAD,
         SEND_DST,
         SEND_SRC,
         SEND_ETHR_TYPE,
@@ -34,9 +33,10 @@ module pgen (
     state_t state, next_state;
 
     logic [10:0] r_pkt_size;
-    logic [15:0]  r_eth_type;
+    logic [15:0] r_eth_type;
     logic [2:0]  r_n_pkt;
     logic [3:0]  r_ipg;
+    logic [7:0]  r_tpayload;
 
     logic [47:0] r_src_addr;
     logic [47:0] r_dst_addr;
@@ -45,8 +45,11 @@ module pgen (
     logic [2:0]  pkt_cnt;
     logic [3:0]  ipg_cnt;
     logic [3:0]  cnt;
+
     logic        busy;
     logic        trig_accept;
+
+    logic [7:0]  lfsr;
 
     //========================================================
     // State register
@@ -97,7 +100,6 @@ module pgen (
                         pkt_cnt          <= 0;
                         ipg_cnt          <= 0;
                         cnt              <= 0;
-
                     end
                     else begin
                         r_pkt_size <= 0;
@@ -112,7 +114,6 @@ module pgen (
                         pkt_cnt          <= 0;
                         ipg_cnt          <= 0;
                         cnt              <= 0;
-
                     end
                 end
 
@@ -133,8 +134,11 @@ module pgen (
 
                 SEND_PAYLOAD: begin
 
-                    if (tvalid && tready)                       
-                        payload_byte_cnt <= (payload_byte_cnt == r_pkt_size-1) ? 0 : payload_byte_cnt + 1;
+                    if (tvalid && tready)
+                        payload_byte_cnt <=
+                            (payload_byte_cnt == r_pkt_size-1)
+                            ? 0
+                            : payload_byte_cnt + 1;
 
                     if (tvalid && tready && tlast)
                         pkt_cnt <= pkt_cnt + 1;
@@ -142,7 +146,7 @@ module pgen (
                 end
 
                 IPG: begin
-                        ipg_cnt <= ipg_cnt + 1;
+                    ipg_cnt <= ipg_cnt + 1;
                 end
 
                 CLEANUP: begin
@@ -202,11 +206,14 @@ module pgen (
 
             SEND_PAYLOAD: begin
 
-                if (tvalid && tready && payload_byte_cnt == r_pkt_size-1) begin
+                if (tvalid && tready &&
+                    payload_byte_cnt == r_pkt_size-1) begin
+
                     if (pkt_cnt == r_n_pkt-1)
                         next_state = CLEANUP;
                     else
                         next_state = IPG;
+
                 end
                 else
                     next_state = SEND_PAYLOAD;
@@ -232,64 +239,79 @@ module pgen (
     //========================================================
     always_comb begin
 
+        tdata  = 8'h00;
+        tvalid = 1'b0;
+        tlast  = 1'b0;
+
         case (state)
 
             IDLE: begin
-                tdata  = 8'h00;
-                tvalid = 1'b0;
-                tlast  = 1'b0;
             end
 
             SEND_DST: begin
                 tvalid = 1'b1;
-                if (tvalid && tready) begin
                 tdata  = r_dst_addr[47 - 8*cnt -: 8];
                 tlast  = 1'b0;
-                end
             end
 
             SEND_SRC: begin
-                tdata  = r_src_addr[47 - 8*cnt -: 8];
                 tvalid = 1'b1;
+                tdata  = r_src_addr[47 - 8*cnt -: 8];
                 tlast  = 1'b0;
             end
 
             SEND_ETHR_TYPE: begin
-                tdata  = r_eth_type[15 - 8*cnt -: 8];
                 tvalid = 1'b1;
+                tdata  = r_eth_type[15 - 8*cnt -: 8];
                 tlast  = 1'b0;
             end
 
             SEND_PAYLOAD: begin
                 tvalid = 1'b1;
-                
-                if (tvalid && tready) begin
-                tdata  = $urandom_range(0, 255);
-                tvalid = 1'b1;
+                tdata  = lfsr;
 
                 if (payload_byte_cnt == r_pkt_size-1)
                     tlast = 1'b1;
                 else
                     tlast = 1'b0;
-                end
             end
 
             IPG: begin
-                tdata  = 8'h00;
-                tvalid = 1'b0;
-                tlast  = 1'b0;
             end
 
             CLEANUP: begin
-                tdata  = 8'h00;
-                tvalid = 1'b0;
-                tlast  = 1'b0;
             end
 
         endcase
     end
 
-    assign busy = (state != IDLE);
-    assign trig_accept = trig && !busy;
+    assign busy         = (state != IDLE);
+    assign trig_accept  = trig && !busy;
+
+    //========================================================
+    // LFSR
+    //========================================================
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            lfsr <= 8'hAB; // non-zero seed
+        end
+        else if (state == SEND_PAYLOAD &&
+                 tvalid && tready) begin
+
+            lfsr <= {
+                lfsr[6:0],
+                lfsr[7] ^ lfsr[5] ^ lfsr[4] ^ lfsr[3]
+            };
+
+        end
+    end
 
 endmodule
+
+/*
+Handshake should only control:
+
+counters
+state advance
+LFSR update
+*/
