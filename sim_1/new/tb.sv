@@ -63,67 +63,30 @@ module tb;
 
         trig = 1;
         #10
+         trig = 0;
         
-        tready = 0;
-        #30
-        
-        tready = 1;
-
-        #60 
-        
-        tready = 0;
-        #10
-        
-        tready = 1;
-        #10
-        
-        tready = 0;
-        #20
-        
-        tready = 1;
-        #60
-        tready = 0;
-        #20
-        
-        tready = 1;
-        
-        # 30
-        
-        
-         tready = 0;
-        #20
-        tready = 1;
-        
-        
-        #30
-        
-        tready = 0;
-        #20
-        tready = 1;
-        
-        
+        #500
+        #500
         #200
         
+        
+
+        pkt_size = 10'd2;
+        eth_type = 15'hAB;
+        n_pkt    = 3'd1;
+        ipg      = 4'd12;
+        src_addr = 48'hDEADBEEFFACE;
+        dst_addr = 48'hCAFEDEADFAAC;
+        
+          tready = 1;
+        
+         trig = 1;
+        #10
+         trig = 0;
 
         $finish;//
     end
 
 endmodule
 
-/*
-git init
-git add .
-git commit -m "Initial commit"
-git remote add origin https://github.com/USERNAME/REPO.git
-git branch -M main
-git push -u origin main
 
-git add .
-git commit -m "Updated files"
-git push
-
-# Useful checks
-git status
-git log --oneline
-git remote -v
-*/
