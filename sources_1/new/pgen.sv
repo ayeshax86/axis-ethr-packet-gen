@@ -241,9 +241,11 @@ module pgen (
             end
 
             SEND_DST: begin
-                tdata  = r_dst_addr[47 - 8*cnt -: 8];
                 tvalid = 1'b1;
+                if (tvalid && tready) begin
+                tdata  = r_dst_addr[47 - 8*cnt -: 8];
                 tlast  = 1'b0;
+                end
             end
 
             SEND_SRC: begin

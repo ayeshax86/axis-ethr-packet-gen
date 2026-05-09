@@ -56,26 +56,56 @@ module tb;
         eth_type = 15'hAB;
         n_pkt    = 3'd3;
         ipg      = 4'd12;
-
-        trig = 1;
-
         src_addr = 48'hAABBCCDDEEFF;
         dst_addr = 48'h112233445566;
-
-        #10 
-
-        trig = 0;
-
-       
-        #50 trig =1;
-        #10 trig = 0;
-        
-        
-        
         
         
 
-        $finish;
+        trig = 1;
+        #10
+        
+        tready = 0;
+        #30
+        
+        tready = 1;
+
+        #60 
+        
+        tready = 0;
+        #10
+        
+        tready = 1;
+        #10
+        
+        tready = 0;
+        #20
+        
+        tready = 1;
+        #60
+        tready = 0;
+        #20
+        
+        tready = 1;
+        
+        # 30
+        
+        
+         tready = 0;
+        #20
+        tready = 1;
+        
+        
+        #30
+        
+        tready = 0;
+        #20
+        tready = 1;
+        
+        
+        #200
+        
+
+        $finish;//
     end
 
 endmodule
