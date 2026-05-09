@@ -110,4 +110,20 @@ module tb;
 
 endmodule
 
+/*
+git init
+git add .
+git commit -m "Initial commit"
+git remote add origin https://github.com/USERNAME/REPO.git
+git branch -M main
+git push -u origin main
 
+git add .
+git commit -m "Updated files"
+git push
+
+# Useful checks
+git status
+git log --oneline
+git remote -v
+*/
