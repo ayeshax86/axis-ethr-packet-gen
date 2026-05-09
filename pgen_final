@@ -3,7 +3,7 @@
 module pgen (
     input  logic        clk,
     input  logic        rst_n,
-    
+
     input  logic [10:0] pkt_size,
     input  logic [15:0] eth_type,
     input  logic [2:0]  n_pkt,
@@ -46,7 +46,6 @@ module pgen (
     logic [3:0]  ipg_cnt;
     logic [3:0]  cnt;
     logic        busy;
-    logic        trig_accept;
 
     //========================================================
     // State register
@@ -85,6 +84,7 @@ module pgen (
 
                 IDLE: begin
                     if (trig) begin
+
                         r_pkt_size <= pkt_size;
                         r_eth_type <= eth_type;
                         r_n_pkt    <= n_pkt;
@@ -100,6 +100,7 @@ module pgen (
 
                     end
                     else begin
+
                         r_pkt_size <= 0;
                         r_eth_type <= 0;
                         r_n_pkt    <= 0;
@@ -136,7 +137,7 @@ module pgen (
                     if (tvalid && tready)                       
                         payload_byte_cnt <= (payload_byte_cnt == r_pkt_size-1) ? 0 : payload_byte_cnt + 1;
 
-                    if (tvalid && tready && tlast)
+                    if (tlast)
                         pkt_cnt <= pkt_cnt + 1;
 
                 end
@@ -180,21 +181,21 @@ module pgen (
             end
 
             SEND_DST: begin
-                if (tvalid && tready && cnt == 5)
+                if (cnt == 5)
                     next_state = SEND_SRC;
                 else
                     next_state = SEND_DST;
             end
 
             SEND_SRC: begin
-                if (tvalid && tready && cnt == 5)
+                if (cnt == 5)
                     next_state = SEND_ETHR_TYPE;
                 else
                     next_state = SEND_SRC;
             end
 
             SEND_ETHR_TYPE: begin
-                if (tvalid && tready && cnt == 1)
+                if (cnt == 1)
                     next_state = SEND_PAYLOAD;
                 else
                     next_state = SEND_ETHR_TYPE;
@@ -202,7 +203,7 @@ module pgen (
 
             SEND_PAYLOAD: begin
 
-                if (tvalid && tready && payload_byte_cnt == r_pkt_size-1) begin
+                if (payload_byte_cnt == r_pkt_size-1) begin
                     if (pkt_cnt == r_n_pkt-1)
                         next_state = CLEANUP;
                     else
@@ -259,9 +260,6 @@ module pgen (
             end
 
             SEND_PAYLOAD: begin
-                tvalid = 1'b1;
-                
-                if (tvalid && tready) begin
                 tdata  = $urandom_range(0, 255);
                 tvalid = 1'b1;
 
@@ -269,7 +267,6 @@ module pgen (
                     tlast = 1'b1;
                 else
                     tlast = 1'b0;
-                end
             end
 
             IPG: begin
