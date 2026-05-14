@@ -1,20 +1,26 @@
 `timescale 1ns/1ps
 
-module pgen (
+module pgen1 (
     input  logic        clk,
     input  logic        rst_n,
+
+    input  logic        en,
+
+    input  logic [10:0] pkt_size, // no. of bytes inside payload (42-1500)
+    input  logic [15:0] eth_type, // 0x0800 for IvP4
+    input  logic [15:0] n_pkt, // no. of packets sent to one address 
+    input  logic [3:0]  ipg, // inter packet gap
     
-    input  logic [10:0] pkt_size,
-    input  logic [15:0] eth_type,
-    input  logic [2:0]  n_pkt,
-    input  logic [3:0]  ipg,
+    // EMAC IP will recognize the end of packet using last bit and 
+    // valid being pulled low. Hence this packet gap does not have to be
+    // equal to the ipg between two real ethernet packets. Just big enough.
 
-    input  logic        trig,
+    input  logic        trig, // used to latch values to the register
 
-    input  logic [47:0] src_addr,
-    input  logic [47:0] dst_addr,
+    input  logic [47:0] src_addr, // source MAC address of 6 bytes
+    input  logic [47:0] dst_addr, // destination MAC address of 6 bytes
 
-    output logic [7:0]  tdata,
+    output logic [7:0]  tdata, // m_axis signals
     output logic        tvalid,
     output logic        tlast,
     input  logic        tready
@@ -34,22 +40,24 @@ module pgen (
 
     logic [10:0] r_pkt_size;
     logic [15:0] r_eth_type;
-    logic [2:0]  r_n_pkt;
+    logic [15:0] r_n_pkt;
     logic [3:0]  r_ipg;
-    logic [7:0]  r_tpayload;
 
     logic [47:0] r_src_addr;
     logic [47:0] r_dst_addr;
 
     logic [10:0] payload_byte_cnt;
-    logic [2:0]  pkt_cnt;
+    logic [15:0] pkt_cnt;
     logic [3:0]  ipg_cnt;
     logic [3:0]  cnt;
 
-    logic        busy;
-    logic        trig_accept;
+    logic        busy; // trig is ignored until tx is busy
 
-    logic [7:0]  lfsr;
+    logic [7:0]  lfsr; 
+    // Linear Feedback Shift Register to generate random numbers
+
+    logic trig_d; // detect the rising edge of trig 
+    logic trig_pulse; // generate a 1 clk signal pulse on detection
 
     //========================================================
     // State register
@@ -57,13 +65,22 @@ module pgen (
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n)
             state <= IDLE;
+        else if (!en)
+            state <= IDLE;
         else
             state <= next_state;
     end
 
+    // next_state signal is driven continuously but 
+    // state reg update on posedge clk
+
     //========================================================
     // Sequential logic
     //========================================================
+
+    // In this block: update and rst registers, increment and
+    // rst counters. 
+
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
 
@@ -87,14 +104,14 @@ module pgen (
             case (state)
 
                 IDLE: begin
-                    if (trig) begin
-                        r_pkt_size <= pkt_size;
-                        r_eth_type <= eth_type;
-                        r_n_pkt    <= n_pkt;
-                        r_ipg      <= ipg;
+                    if (en && trig_pulse) begin
+                        r_pkt_size       <= pkt_size;
+                        r_eth_type       <= eth_type;
+                        r_n_pkt          <= n_pkt;
+                        r_ipg            <= ipg;
 
-                        r_src_addr <= src_addr;
-                        r_dst_addr <= dst_addr;
+                        r_src_addr       <= src_addr;
+                        r_dst_addr       <= dst_addr;
 
                         payload_byte_cnt <= 0;
                         pkt_cnt          <= 0;
@@ -102,13 +119,13 @@ module pgen (
                         cnt              <= 0;
                     end
                     else begin
-                        r_pkt_size <= 0;
-                        r_eth_type <= 0;
-                        r_n_pkt    <= 0;
-                        r_ipg      <= 0;
+                        r_pkt_size       <= 0;
+                        r_eth_type       <= 0;
+                        r_n_pkt          <= 0;
+                        r_ipg            <= 0;
 
-                        r_src_addr <= 0;
-                        r_dst_addr <= 0;
+                        r_src_addr       <= 0;
+                        r_dst_addr       <= 0;
 
                         payload_byte_cnt <= 0;
                         pkt_cnt          <= 0;
@@ -134,22 +151,40 @@ module pgen (
 
                 SEND_PAYLOAD: begin
 
-                    if (tvalid && tready)
+                    if (tvalid && tready) begin
                         payload_byte_cnt <=
-                            (payload_byte_cnt == r_pkt_size-1)
-                            ? 0
-                            : payload_byte_cnt + 1;
+                            (payload_byte_cnt == r_pkt_size - 1)
+                                ? 0
+                                : payload_byte_cnt + 1;
+                    end
 
-                    if (tvalid && tready && tlast)
+                    if (tvalid && tready && tlast) begin
                         pkt_cnt <= pkt_cnt + 1;
+                    end
 
                 end
 
                 IPG: begin
-                    ipg_cnt <= ipg_cnt + 1;
+                    ipg_cnt <= (ipg_cnt == r_ipg - 1) ? 0 : ipg_cnt + 1;
                 end
 
                 CLEANUP: begin
+                    cnt              <= 0;
+
+                    r_pkt_size       <= 0;
+                    r_eth_type       <= 0;
+                    r_n_pkt          <= 0;
+                    r_ipg            <= 0;
+
+                    r_src_addr       <= 0;
+                    r_dst_addr       <= 0;
+
+                    payload_byte_cnt <= 0;
+                    pkt_cnt          <= 0;
+                    ipg_cnt          <= 0;
+                end
+
+                default: begin
                     cnt              <= 0;
 
                     r_pkt_size       <= 0;
@@ -179,8 +214,10 @@ module pgen (
         case (state)
 
             IDLE: begin
-                if (trig)
+                if (en && trig_pulse)
                     next_state = SEND_DST;
+                else
+                    next_state = IDLE;
             end
 
             SEND_DST: begin
@@ -205,23 +242,21 @@ module pgen (
             end
 
             SEND_PAYLOAD: begin
-
                 if (tvalid && tready &&
-                    payload_byte_cnt == r_pkt_size-1) begin
+                    payload_byte_cnt == r_pkt_size - 1) begin
 
-                    if (pkt_cnt == r_n_pkt-1)
+                    if (pkt_cnt == r_n_pkt - 1)
                         next_state = CLEANUP;
                     else
                         next_state = IPG;
-
                 end
-                else
+                else begin
                     next_state = SEND_PAYLOAD;
-
+                end
             end
 
             IPG: begin
-                if (ipg_cnt == r_ipg)
+                if (ipg_cnt == r_ipg - 1)
                     next_state = SEND_DST;
                 else
                     next_state = IPG;
@@ -231,12 +266,19 @@ module pgen (
                 next_state = IDLE;
             end
 
+            default: begin
+                next_state = IDLE;
+            end
+
         endcase
     end
 
     //========================================================
     // Output logic
     //========================================================
+
+    // drive tdata, tvalid and tlast from this comb block
+
     always_comb begin
 
         tdata  = 8'h00;
@@ -250,30 +292,25 @@ module pgen (
 
             SEND_DST: begin
                 tvalid = 1'b1;
-                tdata  = r_dst_addr[47 - 8*cnt -: 8];
-                tlast  = 1'b0;
+                tdata  = r_dst_addr[47 - 8 * cnt -: 8];
             end
 
             SEND_SRC: begin
                 tvalid = 1'b1;
-                tdata  = r_src_addr[47 - 8*cnt -: 8];
-                tlast  = 1'b0;
+                tdata  = r_src_addr[47 - 8 * cnt -: 8];
             end
 
             SEND_ETHR_TYPE: begin
                 tvalid = 1'b1;
-                tdata  = r_eth_type[15 - 8*cnt -: 8];
-                tlast  = 1'b0;
+                tdata  = r_eth_type[15 - 8 * cnt -: 8];
             end
 
             SEND_PAYLOAD: begin
                 tvalid = 1'b1;
                 tdata  = lfsr;
 
-                if (payload_byte_cnt == r_pkt_size-1)
+                if (payload_byte_cnt == r_pkt_size - 1)
                     tlast = 1'b1;
-                else
-                    tlast = 1'b0;
             end
 
             IPG: begin
@@ -282,36 +319,40 @@ module pgen (
             CLEANUP: begin
             end
 
+            default: begin
+                tdata  = 8'h00;
+                tvalid = 1'b0;
+                tlast  = 1'b0;
+            end
+
         endcase
     end
 
-    assign busy         = (state != IDLE);
-    assign trig_accept  = trig && !busy;
+    assign busy = (state != IDLE);
 
     //========================================================
     // LFSR
     //========================================================
+
+    // LFSR reg is given a seed i.e 1001 then it works by 
+    // right shifting and discarding its LSB and then it takes
+    // xor of two or more bits and places the answer
+    // in MSB position.
+
     always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            lfsr <= 8'hAB; // non-zero seed
-        end
-        else if (state == SEND_PAYLOAD &&
-                 tvalid && tready) begin
-
-            lfsr <= {
-                lfsr[6:0],
-                lfsr[7] ^ lfsr[5] ^ lfsr[4] ^ lfsr[3]
-            };
-
-        end
+        if (!rst_n)
+            lfsr <= 8'hAB;
+        else if (state == SEND_PAYLOAD && tvalid && tready)
+            lfsr <= {lfsr[6:0], lfsr[7] ^ lfsr[5] ^ lfsr[4] ^ lfsr[3]};
     end
 
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            trig_d <= 1'b0;
+        else
+            trig_d <= trig;
+    end
+
+    assign trig_pulse = trig & ~trig_d;
+
 endmodule
-
-/*
-Handshake should only control:
-
-counters
-state advance
-LFSR update
-*/
