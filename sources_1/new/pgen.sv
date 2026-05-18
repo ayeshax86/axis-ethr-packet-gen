@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 
-module pgen1 (
+module pkt_gen ( 
     input  logic        clk,
     input  logic        rst_n,
 
@@ -9,11 +9,10 @@ module pgen1 (
     input  logic [10:0] pkt_size, // no. of bytes inside payload (42-1500)
     input  logic [15:0] eth_type, // 0x0800 for IvP4
     input  logic [15:0] n_pkt, // no. of packets sent to one address 
-    input  logic [3:0]  ipg, // inter packet gap
+    input  logic [7:0]  ipg, // inter packet gap
     
-    // EMAC IP will recognize the end of packet using last bit and 
-    // valid being pulled low. Hence this packet gap does not have to be
-    // equal to the ipg between two real ethernet packets. Just big enough.
+    // EMAC IP will recognize the end of packet using last bit and valid being pulled low. Hence this
+    // packet gap does not have to be equal to the ipg between two real ethernet packets. Just big enough.
 
     input  logic        trig, // used to latch values to the register
 
@@ -41,20 +40,19 @@ module pgen1 (
     logic [10:0] r_pkt_size;
     logic [15:0] r_eth_type;
     logic [15:0] r_n_pkt;
-    logic [3:0]  r_ipg;
+    logic [7:0]  r_ipg;
 
     logic [47:0] r_src_addr;
     logic [47:0] r_dst_addr;
 
     logic [10:0] payload_byte_cnt;
     logic [15:0] pkt_cnt;
-    logic [3:0]  ipg_cnt;
+    logic [7:0]  ipg_cnt;
     logic [3:0]  cnt;
 
     logic        busy; // trig is ignored until tx is busy
 
-    logic [7:0]  lfsr; 
-    // Linear Feedback Shift Register to generate random numbers
+    logic [7:0]  lfsr; // Linear Feedback Shift Register to generate random numbers
 
     logic trig_d; // detect the rising edge of trig 
     logic trig_pulse; // generate a 1 clk signal pulse on detection
@@ -71,16 +69,9 @@ module pgen1 (
             state <= next_state;
     end
 
-    // next_state signal is driven continuously but 
-    // state reg update on posedge clk
-
     //========================================================
     // Sequential logic
     //========================================================
-
-    // In this block: update and rst registers, increment and
-    // rst counters. 
-
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
 
@@ -276,9 +267,6 @@ module pgen1 (
     //========================================================
     // Output logic
     //========================================================
-
-    // drive tdata, tvalid and tlast from this comb block
-
     always_comb begin
 
         tdata  = 8'h00;
@@ -333,12 +321,6 @@ module pgen1 (
     //========================================================
     // LFSR
     //========================================================
-
-    // LFSR reg is given a seed i.e 1001 then it works by 
-    // right shifting and discarding its LSB and then it takes
-    // xor of two or more bits and places the answer
-    // in MSB position.
-
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n)
             lfsr <= 8'hAB;
@@ -354,5 +336,49 @@ module pgen1 (
     end
 
     assign trig_pulse = trig & ~trig_d;
+    
+    
+    ila_0 my_ila (
+	.clk(clk), // input wire clk
+
+
+	.probe0(pkt_size), // input wire [10:0]  probe0  
+	.probe1(eth_type), // input wire [15:0]  probe1 
+	.probe2(n_pkt), // input wire [15:0]  probe2 
+	.probe3(ipg), // input wire [3:0]  probe3 
+	.probe4(trig), // input wire [0:0]  probe4 
+	.probe5(src_addr), // input wire [47:0]  probe5 
+	.probe6(dst_addr), // input wire [47:0]  probe6 
+	.probe7(tdata), // input wire [7:0]  probe7 
+	.probe8(tvalid), // input wire [0:0]  probe8 
+	.probe9(tlast), // input wire [0:0]  probe9 
+	.probe10(tready), // input wire [0:0]  probe10 
+	.probe11(r_pkt_size), // input wire [10:0]  probe11 
+	.probe12(r_eth_type), // input wire [15:0]  probe12 
+	.probe13(r_n_pkt), // input wire [15:0]  probe13 
+	.probe14(r_ipg), // input wire [3:0]  probe14 
+	.probe15(r_src_addr), // input wire [47:0]  probe15 
+	.probe16(r_dst_addr), // input wire [47:0]  probe16 
+	.probe17(payload_byte_cnt), // input wire [10:0]  probe17 
+	.probe18(pkt_cnt), // input wire [15:0]  probe18 
+	.probe19(ipg_cnt), // input wire [3:0]  probe19 
+	.probe20(cnt), // input wire [3:0]  probe20 
+	.probe21(busy), // input wire [0:0]  probe21 
+	.probe22(lfsr), // input wire [7:0]  probe22 
+	.probe23(trig_d), // input wire [0:0]  probe23 
+	.probe24(trig_pulse), // input wire [0:0]  probe24 
+	.probe25(state) // input wire [0:0]  probe25 
+	//.probe26(probe26), // input wire [0:0]  probe26 
+	//.probe27(probe27), // input wire [0:0]  probe27 
+	//.probe28(probe28), // input wire [0:0]  probe28 
+	//.probe29(probe29) // input wire [0:0]  probe29
+);
+  
+  
+    
 
 endmodule
+
+
+
+
